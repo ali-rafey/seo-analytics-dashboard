@@ -1,0 +1,197 @@
+// Prisma schema for SEO & Analytics Dashboard
+// One user → many products → many integrations + cached metric snapshots.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Auth (NextAuth + credentials) ────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+  products Product[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ─── Products ─────────────────────────────────────────────────────────────────
+
+model Product {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  url         String
+  logoUrl     String?
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user         User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  integrations Integration[]
+  snapshots    MetricSnapshot[]
+  audits       SeoAudit[]
+  rankings     KeywordRanking[]
+
+  @@index([userId])
+}
+
+// ─── Integrations (one row per provider per product) ──────────────────────────
+
+enum IntegrationProvider {
+  GOOGLE_ANALYTICS
+  GOOGLE_SEARCH_CONSOLE
+  PAGESPEED
+  GITHUB
+  META
+  LINKEDIN
+}
+
+enum IntegrationStatus {
+  DISCONNECTED
+  PENDING_REVIEW
+  CONNECTED
+  ERROR
+}
+
+model Integration {
+  id           String              @id @default(cuid())
+  productId    String
+  provider     IntegrationProvider
+  status       IntegrationStatus   @default(DISCONNECTED)
+  // Provider-specific config (e.g. GA4 propertyId, GSC siteUrl, GitHub repo full_name)
+  config       Json?
+  accessToken  String?             @db.Text
+  refreshToken String?             @db.Text
+  expiresAt    DateTime?
+  scope        String?             @db.Text
+  lastSyncedAt DateTime?
+  errorMessage String?             @db.Text
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, provider])
+  @@index([productId])
+}
+
+// ─── Cached metric snapshots (historical rollups, since live data is via SSE) ─
+
+model MetricSnapshot {
+  id        String   @id @default(cuid())
+  productId String
+  source    String   // ga4, gsc, pagespeed, meta, linkedin
+  metric    String   // sessions, users, impressions, clicks, ctr, position, etc.
+  dimension String?  // e.g. channel grouping, country, device
+  value     Float
+  capturedAt DateTime
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, source, metric, capturedAt])
+}
+
+// ─── SEO audit (GitHub repo scan results) ─────────────────────────────────────
+
+enum AuditSeverity {
+  INFO
+  WARN
+  ERROR
+}
+
+model SeoAudit {
+  id          String   @id @default(cuid())
+  productId   String
+  ranAt       DateTime @default(now())
+  repoFullName String
+  commitSha   String?
+  totalIssues Int      @default(0)
+
+  product Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  issues  SeoAuditIssue[]
+
+  @@index([productId, ranAt])
+}
+
+model SeoAuditIssue {
+  id          String        @id @default(cuid())
+  auditId     String
+  rule        String        // e.g. missing-meta-description, missing-alt-tag
+  severity    AuditSeverity
+  filePath    String
+  lineNumber  Int?
+  message     String        @db.Text
+  suggestion  String?       @db.Text
+
+  audit SeoAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId])
+}
+
+// ─── Keyword rankings (GSC-backed) ────────────────────────────────────────────
+
+model KeywordRanking {
+  id            String   @id @default(cuid())
+  productId     String
+  keyword       String
+  position      Float
+  previousPosition Float?
+  searchVolume  Int?
+  impressions   Int?
+  clicks        Int?
+  capturedAt    DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId, capturedAt])
+  @@unique([productId, keyword, capturedAt])
+}
