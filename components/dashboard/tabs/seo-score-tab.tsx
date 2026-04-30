@@ -191,11 +191,30 @@ export function SeoScoreTab({ product }: { product: ProductSummary }) {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Core Web Vitals</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle className="text-sm">Core Web Vitals</CardTitle>
+            {cwv && (
+              <Badge
+                variant="outline"
+                className={
+                  cwv.fromFieldData
+                    ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-300"
+                    : "border-amber-400/40 bg-amber-400/10 text-amber-300"
+                }
+                title={
+                  cwv.fromFieldData
+                    ? "Field data: real-user metrics from Google's Chrome User Experience Report (trailing 28 days). This is what Google uses to rank your site."
+                    : "Lab data: synthetic measurements from a single Lighthouse run. Not what Google uses for ranking — accurate field data appears once your site has enough Chrome users."
+                }
+              >
+                {cwv.fromFieldData ? "Field data (CrUX)" : "Lab data only"}
+              </Badge>
+            )}
+          </div>
           <CardDescription>
             {cwv?.fromFieldData
-              ? "Real-user (CrUX) field data over the trailing 28 days."
-              : "Insufficient field data — site doesn't yet have enough real-user samples in the CrUX dataset."}
+              ? "Real-user (CrUX) field data over the trailing 28 days. This is what Google's ranking algorithm sees."
+              : "Insufficient field data — site doesn't yet have enough real-user samples in the CrUX dataset. The values below are from a single Lighthouse lab run and won't match what Google uses for ranking until your site has more traffic."}
           </CardDescription>
         </CardHeader>
         <CardContent className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -205,6 +224,7 @@ export function SeoScoreTab({ product }: { product: ProductSummary }) {
             metric={cwv?.lcp}
             unit="ms"
             loading={loading}
+            isFieldData={cwv?.fromFieldData ?? false}
           />
           <CwvCard
             label={cwv?.inp.value !== null ? "INP" : "FID"}
@@ -216,6 +236,7 @@ export function SeoScoreTab({ product }: { product: ProductSummary }) {
             metric={cwv?.inp.value !== null ? cwv?.inp : cwv?.fid}
             unit="ms"
             loading={loading}
+            isFieldData={cwv?.fromFieldData ?? false}
           />
           <CwvCard
             label="CLS"
@@ -223,6 +244,7 @@ export function SeoScoreTab({ product }: { product: ProductSummary }) {
             metric={cwv?.cls}
             unit="score"
             loading={loading}
+            isFieldData={cwv?.fromFieldData ?? false}
           />
         </CardContent>
       </Card>
@@ -454,12 +476,14 @@ function CwvCard({
   metric,
   unit,
   loading,
+  isFieldData,
 }: {
   label: string;
   description: string;
   metric: CoreWebVitals["lcp"] | undefined;
   unit: "ms" | "score";
   loading: boolean;
+  isFieldData: boolean;
 }) {
   if (loading) return <Skeleton className="h-24 w-full" />;
   const bucket = cwvBucketLabel(metric?.category ?? null);
@@ -482,7 +506,18 @@ function CwvCard({
   }
 
   return (
-    <div className="rounded-lg border border-border/60 bg-card/40 p-3">
+    <div
+      className={`rounded-lg border bg-card/40 p-3 ${
+        isFieldData
+          ? "border-border/60"
+          : "border-amber-400/30 bg-amber-400/[0.03]"
+      }`}
+      title={
+        isFieldData
+          ? "From Chrome User Experience Report — what Google uses for ranking."
+          : "From a single Lighthouse lab run — not what Google uses for ranking."
+      }
+    >
       <div className="flex items-center justify-between">
         <p className="text-xs font-semibold uppercase tracking-wide">{label}</p>
         <span className={`text-[11px] font-medium ${tone}`}>{bucket.label}</span>
@@ -538,8 +573,11 @@ function AuditRow({
 function PositionChange({ change }: { change: number | null }) {
   if (change === null)
     return (
-      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-        new
+      <span
+        className="inline-flex items-center gap-1 rounded-full border border-neon-cyan/40 bg-neon-cyan/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-neon-cyan"
+        title="This keyword didn't appear in the previous 30-day window — it's new to your site's rankings."
+      >
+        New
       </span>
     );
   if (Math.abs(change) < 0.1) {

@@ -2,7 +2,10 @@ import { NextResponse } from "next/server";
 
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { octokitFromIntegration } from "@/lib/integrations/github/client";
+import {
+  checkRepoAccess,
+  octokitFromIntegration,
+} from "@/lib/integrations/github/client";
 import { scanRepository } from "@/lib/integrations/github/scanner";
 import type { AuditSeverity } from "@prisma/client";
 
@@ -87,14 +90,37 @@ export async function POST(
     );
   }
 
+  const octokit = octokitFromIntegration(integration);
+
+  // Pre-check repo access before kicking off the (potentially long) scan.
+  // This catches revoked tokens, deleted repos, and lost collaborator access
+  // up front with a clear, actionable error rather than a mid-scan crash.
+  const access = await checkRepoAccess(octokit, owner, repo);
+  if (!access.ok) {
+    await prisma.integration.update({
+      where: { id: integration.id },
+      data: {
+        errorMessage: access.message,
+        status: access.reason === "token-invalid" ? "DISCONNECTED" : "ERROR",
+      },
+    });
+    return NextResponse.json(
+      { error: access.message, reason: access.reason },
+      { status: access.reason === "token-invalid" ? 401 : 403 },
+    );
+  }
+
+  // Use the freshly-verified default branch in case the repo's default
+  // branch was renamed since the user connected it.
+  const defaultBranch = access.defaultBranch || config.defaultBranch;
+
   let result;
   try {
-    const octokit = octokitFromIntegration(integration);
     result = await scanRepository({
       octokit,
       owner,
       repo,
-      defaultBranch: config.defaultBranch,
+      defaultBranch,
     });
   } catch (err) {
     const message =

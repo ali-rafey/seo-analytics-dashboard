@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { Activity, Clock } from "lucide-react";
+import { Activity, Clock, Info } from "lucide-react";
 
 import { useSSE } from "@/hooks/use-sse";
 import { MetricCard } from "@/components/dashboard/metric-card";
@@ -70,12 +70,16 @@ export function OverviewTab({ product }: { product: ProductSummary }) {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-lg font-semibold">Overview</h2>
-          <p className="text-xs text-muted-foreground">
+          <p
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            title="The dashboard polls GA4 every 5 seconds, but GA4's Realtime API itself has a 30–60 second ingestion lag from the moment a user fires an event to when it appears in the API. 'Live' means as fresh as GA4 publicly exposes."
+          >
             Live from GA4 property{" "}
             <code className="rounded bg-muted px-1 py-0.5">
               {snapshot?.ga4.propertyId ?? "—"}
             </code>
             . Auto-refreshes every 5 seconds.
+            <Info className="h-3 w-3 cursor-help" />
           </p>
         </div>
         <StreamStatus status={status} sinceUpdate={sinceUpdate} />

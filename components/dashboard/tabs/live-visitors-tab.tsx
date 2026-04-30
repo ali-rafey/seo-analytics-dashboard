@@ -87,8 +87,12 @@ export function LiveVisitorsTab({ product }: { product: ProductSummary }) {
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold">Live visitors</h2>
-          <p className="text-xs text-muted-foreground">
+          <p
+            className="flex items-center gap-1 text-xs text-muted-foreground"
+            title="The dashboard polls GA4 every 5 seconds, but GA4's Realtime API itself has a 30–60 second ingestion lag. 'Live' here means as fresh as GA4 publicly exposes — the trailing 30-minute window of users who have fired events."
+          >
             Active right now (trailing 30 minutes). Updates every 5 seconds.
+            <Info className="h-3 w-3 cursor-help" />
           </p>
         </div>
         <StreamStatus

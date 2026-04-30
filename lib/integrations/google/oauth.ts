@@ -62,9 +62,20 @@ export async function consumeOAuthState(
   token: string,
 ): Promise<GoogleOAuthState | null> {
   const key = `${STATE_PREFIX}${token}`;
-  const raw = await redis.get(key);
+  // Atomic GETDEL ensures single-use semantics even under concurrent requests.
+  // If a user double-clicks "Connect", only the first callback consumes the
+  // state; the second receives null and is rejected with state-mismatch. This
+  // protects against CSRF replays AND prevents racing callbacks from both
+  // upserting tokens.
+  let raw: string | null;
+  try {
+    raw = await (redis as unknown as { getdel: (k: string) => Promise<string | null> }).getdel(key);
+  } catch {
+    // Fallback for Redis versions < 6.2 that don't support GETDEL.
+    raw = await redis.get(key);
+    if (raw) await redis.del(key);
+  }
   if (!raw) return null;
-  await redis.del(key);
   try {
     return JSON.parse(raw) as GoogleOAuthState;
   } catch {

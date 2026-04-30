@@ -161,3 +161,19 @@ This codebase contains **no mock data** anywhere. Every metric is fetched from
 a live API. If an integration is not connected (or pending app review for
 Meta/LinkedIn), the relevant card renders an explicit empty/disconnected state
 rather than showing fabricated numbers.
+
+## Timezone & data freshness notes
+
+- **Date ranges** (`lib/data/period.ts`) are computed as UTC calendar dates.
+  GA4 / Search Console interpret these in the **property's configured timezone**,
+  so for tightest accuracy run the deployment in UTC (Vercel default) and set
+  the GA4 property timezone to UTC. For 7/30/90-day windows the drift is
+  statistically negligible; "today" queries near midnight in the property
+  timezone may differ by 1 day.
+- **GA4 Realtime API** has a 30–60 second ingestion lag from event fire to
+  appearance in the API. The Overview and Live Visitors tabs poll every 5 s,
+  but the data inside that 5 s window is GA4's most recent ingested view.
+  Tooltips on those tabs disclose this so users aren't misled by "Live".
+- **Cache TTLs** are tuned per quota: Overview/Live = 5 s, Traffic = 30–120 s,
+  Reach (GSC) = 5 min, SEO/PageSpeed = 10–30 min. Multiple users viewing the
+  same product share cached responses to stay under provider quotas.

@@ -85,9 +85,15 @@ export async function consumeOAuthState(
   token: string,
 ): Promise<GitHubOAuthState | null> {
   const key = `${STATE_PREFIX}${token}`;
-  const raw = await redis.get(key);
+  // Atomic GETDEL — see lib/integrations/google/oauth.ts for rationale.
+  let raw: string | null;
+  try {
+    raw = await (redis as unknown as { getdel: (k: string) => Promise<string | null> }).getdel(key);
+  } catch {
+    raw = await redis.get(key);
+    if (raw) await redis.del(key);
+  }
   if (!raw) return null;
-  await redis.del(key);
   try {
     return JSON.parse(raw) as GitHubOAuthState;
   } catch {
