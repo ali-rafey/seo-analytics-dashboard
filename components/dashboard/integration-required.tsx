@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
-import { Loader2, Plug } from "lucide-react";
+import { Loader2, Plug, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -13,24 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Ga4SetupGuide } from "@/components/dashboard/ga4-setup-guide";
 
 type Provider = "google" | "github" | "meta" | "linkedin";
-
-/**
- * Heuristic: any errorMessage starting with "No GA4 properties found" or
- * referencing a missing property triggers the friendly Ga4SetupGuide UI
- * (account-switch + step-by-step onboarding) instead of a generic red banner.
- */
-function isNoGa4PropertyError(errorMessage: string | null | undefined): boolean {
-  if (!errorMessage) return false;
-  const m = errorMessage.toLowerCase();
-  return (
-    m.includes("no ga4 properties") ||
-    m.includes("no analytics propert") ||
-    m.includes("couldn't list ga4 properties")
-  );
-}
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   google: "Google",
@@ -39,9 +23,30 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   linkedin: "LinkedIn",
 };
 
+/**
+ * Heuristic: detect the "Google account had no GA4 property" failure mode so
+ * we can show a friendly retry message instead of a raw technical error.
+ * All other errors are also smoothed over for non-technical users — the raw
+ * `errorMessage` is logged to the console for debugging but never shown.
+ */
+function isNoGa4PropertyError(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  const m = errorMessage.toLowerCase();
+  return (
+    m.includes("no ga4 properties") ||
+    m.includes("no analytics propert") ||
+    m.includes("couldn't list ga4 properties") ||
+    m.includes("no search console sites") ||
+    m.includes("couldn't list search console")
+  );
+}
+
 export function IntegrationRequired({
   productId,
-  productUrl,
+  // productUrl kept in the signature for backwards compatibility with the
+  // tabs that pass it; no longer used inside, since the elaborate setup guide
+  // was removed in favor of a simple "make sure you have GA set up" message.
+  productUrl: _productUrl,
   provider,
   scope,
   title,
@@ -62,24 +67,26 @@ export function IntegrationRequired({
 }) {
   const [connecting, setConnecting] = useState(false);
 
-  // Special-case the most common GA4 onboarding failure with a tailored guide
-  // instead of a vague red error banner. Only triggers for Google + GA4 scope.
-  if (
-    provider === "google" &&
-    (scope === "ga4" || scope === "all") &&
-    status === "ERROR" &&
-    isNoGa4PropertyError(errorMessage)
-  ) {
-    return (
-      <Ga4SetupGuide productId={productId} productUrl={productUrl ?? ""} />
-    );
+  // Log raw error for debugging without showing it to the user.
+  if (errorMessage && status === "ERROR") {
+    if (typeof window !== "undefined") {
+      console.warn("[integration]", provider, scope, errorMessage);
+    }
   }
 
-  function onConnect() {
+  const isGoogle = provider === "google";
+  const inErrorState = status === "ERROR";
+  const isFriendlyRetry = isGoogle && inErrorState && isNoGa4PropertyError(errorMessage);
+
+  function onConnect(opts: { switchAccount?: boolean } = {}) {
     setConnecting(true);
     if (provider === "google") {
       const params = new URLSearchParams({ productId });
       if (scope) params.set("scope", scope);
+      // After an error, show Google's account picker so the user can pick
+      // a different account if that's the cause. On a first-time connect
+      // we let Google use its default behavior — fewer clicks.
+      if (opts.switchAccount || inErrorState) params.set("switchAccount", "1");
       window.location.href = `/api/integrations/google/connect?${params.toString()}`;
       return;
     }
@@ -105,31 +112,53 @@ export function IntegrationRequired({
           {PROVIDER_LABEL[provider]} requires an approved app + business
           verification before its analytics API can be used. Until that&apos;s
           complete, this card stays empty rather than showing fabricated
-          numbers. Configure {PROVIDER_LABEL[provider]} credentials in{" "}
-          <code className="rounded bg-muted px-1 py-0.5 text-xs">.env</code> and
-          submit your app for review — see <code>README.md</code> for the
-          exact steps.
+          numbers.
         </CardContent>
       </Card>
     );
   }
 
+  // Friendly retry state — shown after a failed Google connect attempt.
+  // Deliberately minimal: one short sentence, one button. No technical
+  // jargon, no setup walkthrough, no error codes — non-technical users
+  // should never feel like the app is broken.
+  if (isFriendlyRetry) {
+    const isGsc = scope === "gsc";
+    const productLabel = isGsc ? "Google Search Console" : "Google Analytics";
+    return (
+      <Card className="border-dashed">
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>
+            Please make sure you have {productLabel} set up for your website,
+            then try again.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => onConnect({ switchAccount: true })} disabled={connecting}>
+            {connecting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="h-4 w-4" />
+            )}
+            Try again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Default state — first-time connect or any non-friendly error. Identical
+  // to the first-time view (no error badge, no error text) so users see one
+  // consistent screen: a button that says "Connect Google".
   return (
     <Card className="border-dashed">
       <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle>{title}</CardTitle>
-          {status && <Badge variant="outline">{status.toLowerCase()}</Badge>}
-        </div>
+        <CardTitle>{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4 text-sm text-muted-foreground">
-        {errorMessage && (
-          <p className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-destructive">
-            {errorMessage}
-          </p>
-        )}
-        <Button onClick={onConnect} disabled={connecting}>
+      <CardContent>
+        <Button onClick={() => onConnect()} disabled={connecting}>
           {connecting ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
