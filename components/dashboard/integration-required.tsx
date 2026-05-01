@@ -13,8 +13,24 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Ga4SetupGuide } from "@/components/dashboard/ga4-setup-guide";
 
 type Provider = "google" | "github" | "meta" | "linkedin";
+
+/**
+ * Heuristic: any errorMessage starting with "No GA4 properties found" or
+ * referencing a missing property triggers the friendly Ga4SetupGuide UI
+ * (account-switch + step-by-step onboarding) instead of a generic red banner.
+ */
+function isNoGa4PropertyError(errorMessage: string | null | undefined): boolean {
+  if (!errorMessage) return false;
+  const m = errorMessage.toLowerCase();
+  return (
+    m.includes("no ga4 properties") ||
+    m.includes("no analytics propert") ||
+    m.includes("couldn't list ga4 properties")
+  );
+}
 
 const PROVIDER_LABEL: Record<Provider, string> = {
   google: "Google",
@@ -25,6 +41,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
 
 export function IntegrationRequired({
   productId,
+  productUrl,
   provider,
   scope,
   title,
@@ -34,6 +51,7 @@ export function IntegrationRequired({
   errorMessage,
 }: {
   productId: string;
+  productUrl?: string;
   provider: Provider;
   scope?: "ga4" | "gsc" | "all";
   title: string;
@@ -43,6 +61,19 @@ export function IntegrationRequired({
   errorMessage?: string | null;
 }) {
   const [connecting, setConnecting] = useState(false);
+
+  // Special-case the most common GA4 onboarding failure with a tailored guide
+  // instead of a vague red error banner. Only triggers for Google + GA4 scope.
+  if (
+    provider === "google" &&
+    (scope === "ga4" || scope === "all") &&
+    status === "ERROR" &&
+    isNoGa4PropertyError(errorMessage)
+  ) {
+    return (
+      <Ga4SetupGuide productId={productId} productUrl={productUrl ?? ""} />
+    );
+  }
 
   function onConnect() {
     setConnecting(true);

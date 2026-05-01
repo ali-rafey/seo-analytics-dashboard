@@ -15,6 +15,9 @@ const querySchema = z.object({
   productId: z.string().min(1),
   scope: z.enum(["ga4", "gsc", "all"]).default("ga4"),
   returnTo: z.string().optional(),
+  // ?switchAccount=1 forces Google's account picker on the OAuth screen,
+  // letting users recover from "wrong account had no GA4 property".
+  switchAccount: z.enum(["0", "1"]).optional(),
 });
 
 export async function GET(req: Request) {
@@ -38,6 +41,7 @@ export async function GET(req: Request) {
     productId: url.searchParams.get("productId") ?? "",
     scope: url.searchParams.get("scope") ?? "ga4",
     returnTo: url.searchParams.get("returnTo") ?? undefined,
+    switchAccount: url.searchParams.get("switchAccount") ?? undefined,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid query" }, { status: 400 });
@@ -67,7 +71,9 @@ export async function GET(req: Request) {
 
   let authUrl: string;
   try {
-    authUrl = buildAuthUrl(state, scopes);
+    authUrl = buildAuthUrl(state, scopes, {
+      forceAccountChooser: parsed.data.switchAccount === "1",
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to build auth URL";
     console.error("[google-connect] buildAuthUrl failed:", message);

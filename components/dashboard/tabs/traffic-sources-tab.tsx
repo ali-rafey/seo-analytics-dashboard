@@ -65,6 +65,7 @@ export function TrafficSourcesTab({ product }: { product: ProductSummary }) {
     return (
       <IntegrationRequired
         productId={product.id}
+        productUrl={product.url}
         provider="google"
         scope="ga4"
         title="Connect Google Analytics 4"

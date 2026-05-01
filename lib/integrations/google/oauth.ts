@@ -99,11 +99,19 @@ export async function consumeOAuthState(
   }
 }
 
-export function buildAuthUrl(state: string, scopes: string[]): string {
+export function buildAuthUrl(
+  state: string,
+  scopes: string[],
+  opts: { forceAccountChooser?: boolean } = {},
+): string {
   const client = getGoogleOAuthClient();
+  // `select_account` shows Google's account picker even if the browser already
+  // has a session — needed for "Try a different Google account" recovery when
+  // the first-attempt account had no GA4 property.
+  const prompt = opts.forceAccountChooser ? "select_account consent" : "consent";
   return client.generateAuthUrl({
     access_type: "offline",
-    prompt: "consent",
+    prompt,
     include_granted_scopes: true,
     scope: scopes,
     state,
