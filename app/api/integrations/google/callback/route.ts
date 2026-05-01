@@ -26,14 +26,24 @@ export async function GET(req: Request) {
   const errorParam = url.searchParams.get("error");
 
   if (errorParam) {
-    return redirectWithError(url.origin, "/dashboard", errorParam);
+    const desc = url.searchParams.get("error_description") ?? undefined;
+    console.error(
+      "[google-callback] Google returned error:",
+      errorParam,
+      desc ?? "",
+    );
+    return redirectWithError(url.origin, "/dashboard", errorParam, desc);
   }
   if (!code || !stateToken) {
+    console.error("[google-callback] missing code or state in callback URL");
     return redirectWithError(url.origin, "/dashboard", "missing-code");
   }
 
   const state = await consumeOAuthState(stateToken);
   if (!state || state.userId !== session.user.id) {
+    console.error(
+      "[google-callback] state mismatch (token expired, replayed, or different user)",
+    );
     return redirectWithError(url.origin, "/dashboard", "state-mismatch");
   }
 
@@ -49,11 +59,13 @@ export async function GET(req: Request) {
   try {
     tokens = await exchangeCodeForTokens(code);
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[google-callback] token exchange failed:", message);
     return redirectWithError(
       url.origin,
       state.returnTo,
       "token-exchange-failed",
-      err instanceof Error ? err.message : undefined,
+      message,
     );
   }
 
@@ -71,9 +83,25 @@ export async function GET(req: Request) {
   const wantsGSC = state.scopes.some((s) => s.includes("webmasters"));
 
   // Fetch what's available for the user. If multiple, redirect to picker.
+  // Catch and remember the failure reason so it ends up on the integration row
+  // (instead of silently turning a 403/missing-scope into "no properties found").
+  let ga4ListError: string | null = null;
+  let gscListError: string | null = null;
   const [ga4Properties, gscSites] = await Promise.all([
-    wantsGA4 ? listGA4Properties(oauth).catch(() => []) : Promise.resolve([]),
-    wantsGSC ? listGSCSites(oauth).catch(() => []) : Promise.resolve([]),
+    wantsGA4
+      ? listGA4Properties(oauth).catch((e: unknown) => {
+          ga4ListError = e instanceof Error ? e.message : String(e);
+          console.error("[google-callback] listGA4Properties failed:", ga4ListError);
+          return [];
+        })
+      : Promise.resolve([]),
+    wantsGSC
+      ? listGSCSites(oauth).catch((e: unknown) => {
+          gscListError = e instanceof Error ? e.message : String(e);
+          console.error("[google-callback] listGSCSites failed:", gscListError);
+          return [];
+        })
+      : Promise.resolve([]),
   ]);
 
   const needsPicker =
@@ -106,7 +134,9 @@ export async function GET(req: Request) {
         status: ga4Properties.length === 0 ? "ERROR" : "DISCONNECTED",
         errorMessage:
           ga4Properties.length === 0
-            ? "No GA4 properties found for this Google account."
+            ? ga4ListError
+              ? `Couldn't list GA4 properties: ${ga4ListError}. Make sure the Google account you signed in with has access to a GA4 property.`
+              : "No GA4 properties found on this Google account. Sign in with the Google account that owns/has access to your GA4 property, or create one at analytics.google.com."
             : null,
       });
     }
@@ -136,7 +166,9 @@ export async function GET(req: Request) {
         status: gscSites.length === 0 ? "ERROR" : "DISCONNECTED",
         errorMessage:
           gscSites.length === 0
-            ? "No Search Console sites found for this Google account."
+            ? gscListError
+              ? `Couldn't list Search Console sites: ${gscListError}.`
+              : "No Search Console sites found on this Google account. Verify your site at search.google.com/search-console first, then reconnect."
             : null,
       });
     }

@@ -10,5 +10,6 @@ export type ProductSummary = {
     provider: IntegrationProvider;
     status: IntegrationStatus;
     lastSyncedAt: Date | null;
+    errorMessage: string | null;
   }[];
 };

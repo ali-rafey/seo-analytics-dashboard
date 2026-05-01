@@ -5,7 +5,10 @@
 
 function required(name: string): string {
   const value = process.env[name];
-  if (!value) {
+  // Treat empty string as missing — Vercel can return "" for unset vars
+  // and the `??` operator does not fall back on empty strings, which would
+  // silently propagate an invalid empty value into URL builders.
+  if (!value || value.trim() === "") {
     if (process.env.NODE_ENV === "production") {
       throw new Error(`Missing required env var: ${name}`);
     }
@@ -15,7 +18,8 @@ function required(name: string): string {
 }
 
 function optional(name: string): string | undefined {
-  return process.env[name] || undefined;
+  const v = process.env[name];
+  return v && v.trim() !== "" ? v : undefined;
 }
 
 export const env = {
@@ -23,7 +27,10 @@ export const env = {
   DATABASE_URL: required("DATABASE_URL"),
   REDIS_URL: required("REDIS_URL"),
   NEXTAUTH_SECRET: required("NEXTAUTH_SECRET"),
-  NEXTAUTH_URL: process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+  NEXTAUTH_URL:
+    process.env.NEXTAUTH_URL && process.env.NEXTAUTH_URL.trim() !== ""
+      ? process.env.NEXTAUTH_URL.trim()
+      : "http://localhost:3000",
 
   GOOGLE_CLIENT_ID: optional("GOOGLE_CLIENT_ID"),
   GOOGLE_CLIENT_SECRET: optional("GOOGLE_CLIENT_SECRET"),

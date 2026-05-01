@@ -65,5 +65,19 @@ export async function GET(req: Request) {
     returnTo: parsed.data.returnTo ?? `/dashboard?product=${product.id}`,
   });
 
-  return NextResponse.redirect(buildAuthUrl(state, scopes));
+  let authUrl: string;
+  try {
+    authUrl = buildAuthUrl(state, scopes);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to build auth URL";
+    console.error("[google-connect] buildAuthUrl failed:", message);
+    const target = new URL(
+      `/dashboard?product=${product.id}`,
+      new URL(req.url).origin,
+    );
+    target.searchParams.set("connect_error", "config");
+    target.searchParams.set("detail", message);
+    return NextResponse.redirect(target.toString());
+  }
+  return NextResponse.redirect(authUrl);
 }

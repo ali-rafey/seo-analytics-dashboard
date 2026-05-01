@@ -18,7 +18,12 @@ export default async function DashboardPage({
     orderBy: { createdAt: "asc" },
     include: {
       integrations: {
-        select: { provider: true, status: true, lastSyncedAt: true },
+        select: {
+          provider: true,
+          status: true,
+          lastSyncedAt: true,
+          errorMessage: true,
+        },
       },
     },
   });

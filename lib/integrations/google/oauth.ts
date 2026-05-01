@@ -19,7 +19,23 @@ export const GOOGLE_SCOPES_ALL = [
 ];
 
 export function googleRedirectUri(): string {
-  return `${env.NEXTAUTH_URL.replace(/\/$/, "")}/api/integrations/google/callback`;
+  const base = env.NEXTAUTH_URL.replace(/\/$/, "");
+  // Validate the base URL is absolute (has scheme + host). If NEXTAUTH_URL is
+  // missing/empty/relative on the deployment, Google rejects the auth request
+  // with `redirect_uri_mismatch` and the failure mode is opaque. Throwing here
+  // surfaces the exact cause in Vercel logs and the connect error redirect.
+  try {
+    const u = new URL(base);
+    if (u.protocol !== "http:" && u.protocol !== "https:") {
+      throw new Error("must be http(s)");
+    }
+  } catch {
+    throw new Error(
+      `NEXTAUTH_URL is not a valid absolute URL (got: "${env.NEXTAUTH_URL}"). ` +
+        `Set NEXTAUTH_URL to your deployed origin (e.g. https://devnetseo.vercel.app) in Vercel project settings, then redeploy.`,
+    );
+  }
+  return `${base}/api/integrations/google/callback`;
 }
 
 export function getGoogleOAuthClient(): OAuth2Client {
@@ -96,8 +112,30 @@ export function buildAuthUrl(state: string, scopes: string[]): string {
 
 export async function exchangeCodeForTokens(code: string) {
   const client = getGoogleOAuthClient();
-  const { tokens } = await client.getToken(code);
-  return tokens;
+  try {
+    const { tokens } = await client.getToken(code);
+    return tokens;
+  } catch (err) {
+    // Google returns rich error details (e.g. "redirect_uri_mismatch",
+    // "invalid_client") on the response body. The googleapis client surfaces
+    // them via err.response.data.error_description. Log them so they show up
+    // in Vercel function logs — the default Error.message often hides them.
+    const e = err as {
+      message?: string;
+      response?: { data?: { error?: string; error_description?: string } };
+    };
+    const detail =
+      e?.response?.data?.error_description ||
+      e?.response?.data?.error ||
+      e?.message ||
+      "unknown";
+    console.error("[google-oauth] token exchange failed:", detail, {
+      hasClientId: Boolean(env.GOOGLE_CLIENT_ID),
+      hasClientSecret: Boolean(env.GOOGLE_CLIENT_SECRET),
+      redirectUri: googleRedirectUri(),
+    });
+    throw new Error(`Google token exchange failed: ${detail}`);
+  }
 }
 
 export function authorizedClient(opts: {

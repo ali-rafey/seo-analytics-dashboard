@@ -70,6 +70,7 @@ export function TrafficSourcesTab({ product }: { product: ProductSummary }) {
         title="Connect Google Analytics 4"
         description="Traffic sources, channel grouping, and conversion rates come from your GA4 property."
         status={ga4?.status}
+        errorMessage={ga4?.errorMessage ?? null}
       />
     );
   }

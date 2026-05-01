@@ -75,6 +75,7 @@ export function ReachTab({ product }: { product: ProductSummary }) {
           title="Connect Google Search Console"
           description="Reach &amp; impressions, click-through rate, average position, and the trend graph all come from Search Console."
           status={gsc?.status}
+          errorMessage={gsc?.errorMessage ?? null}
         />
         <SocialPendingReviewBanner />
       </div>

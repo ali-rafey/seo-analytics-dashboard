@@ -19,6 +19,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   "no-access-token": "Provider did not return an access token.",
   "user-cancelled": "You cancelled the connection.",
   access_denied: "You denied access to the requested permissions.",
+  config: "OAuth is misconfigured on the server.",
+  redirect_uri_mismatch:
+    "Redirect URI mismatch — the deployed origin doesn't match the URL registered in Google Cloud Console.",
 };
 
 export function ConnectionToaster() {
@@ -38,9 +41,11 @@ export function ConnectionToaster() {
       next.delete("connected");
       router.replace(`?${next.toString()}`, { scroll: false });
     } else if (error) {
-      toast.error("Couldn't connect", {
-        description: ERROR_MESSAGES[error] ?? detail ?? error,
-      });
+      // Prefer the server-provided `detail` (e.g. Google's exact
+      // error_description) — it's far more actionable than our canned message.
+      const base = ERROR_MESSAGES[error] ?? error;
+      const description = detail ? `${base} — ${detail}` : base;
+      toast.error("Couldn't connect", { description, duration: 12000 });
       const next = new URLSearchParams(params.toString());
       next.delete("connect_error");
       next.delete("detail");

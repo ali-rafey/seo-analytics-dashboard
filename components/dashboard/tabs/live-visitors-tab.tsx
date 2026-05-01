@@ -65,6 +65,7 @@ export function LiveVisitorsTab({ product }: { product: ProductSummary }) {
         title="Connect Google Analytics 4"
         description="The live visitors map streams real-time geo, device, page, and source data from your GA4 property."
         status={ga4?.status}
+        errorMessage={ga4?.errorMessage ?? null}
       />
     );
   }

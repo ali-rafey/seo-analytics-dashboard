@@ -363,6 +363,8 @@ export function SeoScoreTab({ product }: { product: ProductSummary }) {
               scope="gsc"
               title="Connect Google Search Console"
               description="Keyword rankings come from your Search Console site."
+              status={gsc?.status}
+              errorMessage={gsc?.errorMessage ?? null}
             />
           ) : data?.gsc.error ? (
             <p className="text-sm text-destructive">{data.gsc.error}</p>

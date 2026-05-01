@@ -43,7 +43,7 @@ export function OverviewTab({ product }: { product: ProductSummary }) {
         title="Connect Google Analytics 4"
         description="The Overview tab streams live active visitors and today's session metrics from your GA4 property. No data is shown until you connect."
         status={ga4?.status}
-        errorMessage={null}
+        errorMessage={ga4?.errorMessage ?? null}
       />
     );
   }
